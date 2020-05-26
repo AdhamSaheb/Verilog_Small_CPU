@@ -1,0 +1,239 @@
+module simplecomputer(clock,pc,ir,mbr,ac,mar,IDR,ODR,R0,R1,R2,R3,flagz,flagc,top);
+input clock ;
+input [15:0] IDR  ; 
+output  [15:0]ODR ; 
+output pc,ir,mbr,ac,mar ; //define the CPU registers, PC:program counter, IR:instruction register, MBR:memory buffer register, AC:accumulator, MAR:memory address register
+output [15:0] R0  ;
+output [15:0] R1  ;
+output [15:0] R2  ;
+output [15:0] R3  ; 
+reg [15:0] R0  ;
+reg [15:0] R1  ;
+reg [15:0] R2  ;
+reg [15:0] R3  ;
+
+output flagc ; 
+output flagz;
+reg flagc ; 
+reg flagz; 
+reg [15:0] ir,mbr,ac;
+reg [11:0] pc,mar;
+reg [15:0] stack [0:63];
+reg [15:0] M [0:63];//memory of 64 words, each word is 2 bytes
+reg [3:0] state;
+reg [15:0] registers [3:0]; 
+reg FLAGS [15:0] ; 
+reg [15:0]  ODR ; 
+output [3:0] top ;
+reg [3:0] top ;  
+
+
+
+
+parameter load = 4'b0011 , store = 4'b1011 , add = 4'b0111,  jump = 4'b1100 ;  //define the instructions
+parameter JC = 4'b0100 , JZ=4'b0101 , cmp=4'b1101 ,sub=4'b0010 ; //define new instructions   
+parameter  SL=4'b1110  , SR=4'b1111 ,PUSH=4'b0000 , POP=4'b0001  ,  OUT=4'b1010 , IN=4'b1000; //define new instructions
+
+parameter immediate = 2'b00 , direct = 2'b01 , indirect = 2'b10 , register = 2'b11  ; // define the modes 
+
+integer tos = 0 ; 
+initial begin 
+
+//instruction memory
+M[10] = 16'h3114;
+M[11] = 16'hF101;
+M[12] = 16'h0100;
+M[13] = 16'h3C01;
+M[14] = 16'hA000;
+M[15] = 16'h1100;
+M[16] = 16'h3C01;
+M[17] = 16'hA000;
+
+
+//data memory
+M[20]=16'd4; //store number 3 in location 21 in memory
+
+
+
+pc=10; //start with PC = 7, so first instruction will be the one that in location 7 (16'h3007)
+state=0;//state in indicate to each state : instruction fetch, instruction decode, operand fetch, excution
+end
+
+always @ ( posedge clock  )
+
+ begin // loop one time for each clock rising edge
+case (state)
+0:begin //initialization of MAR to get the instruction from memory
+  mar <= pc; //store PC to MAR because when we want to access the memory, we should store the address in MAR
+
+  state=1; //go to next step next clock
+  end
+  
+1:begin//instruction fetch
+
+  ir <= M[mar]; //store the instuction in IR
+  
+  pc <= pc+1; //go one instruction a head
+  state=2;
+  end
+  
+ 2 : begin // instruction decode 
+  mar <= ir [9:0] ; 
+  state = 3 ; 
+  end 
+  
+3:begin //operand fetch
+
+  case (ir[15:12]) // fill the value of MBR with the correct pattern in each operation type
+  PUSH : mbr <= registers[mar[9:8] ];
+  POP :  mbr <=stack[top] ; 
+  OUT : mbr <= registers[mar[9:8]] ;
+  IN : mbr <= mar [9:8];
+
+   SR : mbr <= mar[7:0] ; 
+   SL :  mbr <= mar[7:0] ; 
+  JC : mbr<= mar[7:0] ; 
+  JZ :mbr<= mar[7:0] ; 
+ 
+    store: mbr <= mar[7:0] ;
+    jump : mbr<= mar[7:0] ; 
+    load , add : begin 
+ case ( ir[11:10] )   // case for the adressing mode 
+
+
+immediate :  
+mbr <= mar[7:0] ; 
+direct : mbr <= M[mar[7:0]];
+indirect : mbr <= M[M[mar[7:0]]] ; 
+register : mbr <= registers[mar[1:0]] ; 
+ 
+ 
+endcase
+end 
+
+  endcase
+  state=4;
+  end  
+  
+4:begin //excution 
+case (ir [15:12]) 
+
+  add : begin
+    if (mbr[7] == 1 ) 
+ mbr <= (-(~(mbr[7:0])+ 1) )  ; 
+
+  
+    registers[mar[9:8]] <= (registers[mar[9:8]] + mbr) ;
+  if (registers[mar[9:8]]  > 16'hFFFF ) 
+    FLAGS[0] = 1 ; 
+    else if (registers[mar[9:8]] == 0  ) 
+    FLAGS[1] = 1 ;  
+    
+    
+    state=0;  
+  end
+  
+  sub : begin //sub
+   if (mbr[7] == 1 ) 
+ mbr <= (-(~(mbr[7:0])+ 1) )  ; 
+
+  
+    registers[mar[9:8]] <= (registers[mar[9:8]] - mbr) ;
+if (registers[mar[9:8]] == 0  ) 
+    FLAGS[1] = 1 ;  
+    
+    
+    state=0;  
+  end
+ load : begin //load
+   if (mbr[7] == 1 ) 
+ mbr <= (-(~(mbr[7:0])+ 1) )  ; 
+
+  
+   registers[mar[9:8]] <= mbr  ; 
+    state=0; 
+  end
+ store : begin //store
+     registers[mar[9:8]] <= mbr ; 
+    state=0;
+  end
+  jump : begin //jump
+    pc <= mbr;
+    state=0;
+  end 
+    JC : begin //jump if carry
+    if (FLAGS[0]==1) 
+	pc <= mbr;
+    state=0;
+  end
+  JZ : begin // jump if zero
+    if (FLAGS[1]==1) 
+	pc <= mbr;
+    state=0;
+  end
+   SR : begin // logical shift right 
+  
+   registers[mar[9:8]] <= registers[mar[9:8]] >> mbr ;  
+    state=0;
+  end
+    SL : begin // logical shift left 
+  registers[mar[9:8]] <= registers[mar[9:8]] << mbr ;  
+    state=0;
+  end
+   cmp : begin //comapre , sets zero flag if ri > rj , and vise versa 
+    if (registers[mar[9:8]] > registers[mar[1:0]]) begin
+	FLAGS[0] = 1'b1 ; 
+	end 
+	else if (registers[mar[9:8]] < registers[mar[1:0]] ) begin
+	FLAGS[0] =  1'b0 ; 
+	end 
+	else  if (registers[mar[9:8]] == registers[mar[1:0]]) begin 
+  FLAGS[1]  =  1'b1 ;
+   
+    state=0;
+  end
+   end 
+   IN : begin // input 
+    registers[mbr] <= IDR[15:0] ; 
+    state=0;
+  end
+    OUT : begin // out  
+    ODR[15:0]<= mbr  ; 
+    state=0;
+  end
+  
+  PUSH : begin 
+  stack[tos]  <= mbr  ;
+ tos = tos +1 ; 
+top <= tos ;  
+state =0 ; 
+ 
+ 
+ end 
+ 
+ POP : begin 
+  stack[tos]  <= mbr  ;
+ tos = tos -1 ; 
+top <= tos ;  
+ state =0 ; 
+ end 
+  
+
+ 
+ endcase
+ 
+  
+  
+  end 
+ 
+endcase 
+R0 <= registers[0] ; 
+R1 <= registers[1] ; 
+R2 <= registers[2] ; 
+R3 <= registers[3] ; 
+flagz<= FLAGS[1] ; 
+flagc<= FLAGS[0] ; 
+
+end
+
+endmodule      

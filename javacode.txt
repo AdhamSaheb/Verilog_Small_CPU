@@ -1,0 +1,103 @@
+import java.util.ArrayList;
+import java.util.Scanner;
+import java.io.*;
+
+public class tester {
+
+	public static void main(String[] args) throws Exception {
+
+		// System.out.println("please enter the code use ';' to end: ");
+		// Scanner input = new Scanner(System.in);
+		FileReader file = new FileReader("C:/Users/ELIFE/Desktop/part2.txt");
+		BufferedReader reader = new BufferedReader(file);
+		ArrayList<String> arr = new ArrayList<>();
+		String t = "";
+		// t = input.nextLine();
+		t = reader.readLine();
+		do {
+
+			arr.add(t);
+			// t = input.nextLine();
+			t = reader.readLine();
+
+			// } while (!t.equals(";"));
+		} while (t != null);
+		String[] array = new String[arr.size()];
+		arr.toArray(array);
+		Checky(array);
+
+		// input.close();
+	}
+
+	private static void Checky(String[] array) {
+		String oppcode = "";
+		int mode = 0;
+		String register = "";
+		String operand = "";
+		int origin = 0;
+		for (int i = 0; i < array.length; i++) {
+			String[] tokens = array[i].split("[ ,]");
+			if (tokens[0].equals("ORG"))
+				origin = Integer.parseInt(tokens[1]);
+			else {
+				switch (tokens[0]) { // to determine load // store // add
+
+				case "LOAD":
+					oppcode = "16'h3";
+					break;
+
+				case "STORE":
+					oppcode = "16'h5";
+					break;
+
+				case "ADD":
+					oppcode = "16'h7";
+					break;
+
+				}
+				register = "" + tokens[1].charAt(1);
+				if (tokens[2].charAt(0) == '[') {// immediate
+					mode = 4;
+					operand = "" + tokens[2].charAt(1);
+					for (int j = 2; j < tokens[2].length(); j++) {
+						if (tokens[2].charAt(j) != ']')
+							operand += tokens[2].charAt(j);
+						else {
+							break;
+						}
+					}
+
+				}
+				if (Character.isDigit(tokens[2].charAt(0))) {// direct
+					mode = 0;
+					if (Integer.parseInt(tokens[2]) < 10)
+						operand = "0" + tokens[2].charAt(0);
+					else
+						operand += tokens[2];
+
+				}
+				if (Character.isLetter(tokens[2].charAt(0))) { // register to register
+					mode = 12;
+					operand += tokens[2].charAt(1);
+					if (tokens[2].length() < 3)
+						operand = "0" + tokens[2].charAt(1);
+					else
+						for (int k = 1; k < tokens[2].length(); k++) {
+							operand += tokens[2].charAt(k);
+						}
+
+				}
+
+				System.out.println("Memory[" + origin + "]" + oppcode + ToHex(register, mode) + operand + ";");
+				origin++;
+			}
+
+		}
+	}
+
+	public static String ToHex(String register, int mode) {
+		int k = mode + Integer.parseInt(register);
+		return Integer.toHexString(k).toUpperCase();
+
+	}
+}
