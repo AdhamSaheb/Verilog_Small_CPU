@@ -1,0 +1,3 @@
+# Verilog_Small_CPU
+
+Source Code for simulation memory addressing modes using Verilog, with the existance of registers in 8086 such as MBR,MAR,OR .....
